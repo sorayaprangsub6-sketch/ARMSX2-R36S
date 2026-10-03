@@ -212,6 +212,46 @@ echo "Building SDL..."
 rm -fr "$SDL"
 tar xf "$SDL.tar.gz"
 cd "$SDL"
+
+# R36S diagnostic: preserve the real SDL_EGL_LoadLibrary() errors before
+# KMSDRM replaces them with the generic "Can't load EGL/GL library..." error.
+python3 - <<'PY'
+from pathlib import Path
+
+p = Path("src/video/kmsdrm/SDL_kmsdrmvideo.c")
+s = p.read_text()
+
+old = """            if (!SDL_EGL_LoadLibrary(_this, NULL, egl_display, EGL_PLATFORM_GBM_MESA)) {
+                // Try again with OpenGL ES 2.0
+                _this->gl_config.profile_mask = SDL_GL_CONTEXT_PROFILE_ES;
+                _this->gl_config.major_version = 2;
+                _this->gl_config.minor_version = 0;
+                if (!SDL_EGL_LoadLibrary(_this, NULL, egl_display, EGL_PLATFORM_GBM_MESA)) {
+                    return SDL_SetError("Can't load EGL/GL library on window creation.");
+                }
+            }"""
+
+new = """            if (!SDL_EGL_LoadLibrary(_this, NULL, egl_display, EGL_PLATFORM_GBM_MESA)) {
+                fprintf(stderr, "R36S SDL3: first EGL load failed: %s\\n", SDL_GetError());
+                fflush(stderr);
+                // Try again with OpenGL ES 2.0
+                _this->gl_config.profile_mask = SDL_GL_CONTEXT_PROFILE_ES;
+                _this->gl_config.major_version = 2;
+                _this->gl_config.minor_version = 0;
+                if (!SDL_EGL_LoadLibrary(_this, NULL, egl_display, EGL_PLATFORM_GBM_MESA)) {
+                    fprintf(stderr, "R36S SDL3: GLES2 fallback failed: %s\\n", SDL_GetError());
+                    fflush(stderr);
+                    return SDL_SetError("Can't load EGL/GL library on window creation.");
+                }
+            }"""
+
+if old not in s:
+    raise SystemExit("R36S SDL3 diagnostic patch target not found; refusing to modify the wrong source.")
+
+p.write_text(s.replace(old, new, 1))
+print("R36S SDL3 EGL diagnostic patch applied.")
+PY
+
 cmake -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH="$INSTALLDIR" -DCMAKE_INSTALL_PREFIX="$INSTALLDIR" $PIC_FLAG -DBUILD_SHARED_LIBS=$SHARED_LIBS -DSDL_SHARED=$SHARED_LIBS -DSDL_STATIC=$STATIC_LIBS -DSDL_VIDEO=ON -DSDL_KMSDRM=ON -DSDL_KMSDRM_SHARED=ON -DSDL_POWER=OFF -DSDL_SENSOR=OFF -DSDL_DIALOG=OFF -DSDL_TRAY=OFF -DSDL_TEST_LIBRARY=OFF -DSDL_UNIX_CONSOLE_BUILD=ON -G Ninja
 
 # R36S diagnostic: print the SDL3 video/EGL/KMSDRM configuration selected by CMake.
