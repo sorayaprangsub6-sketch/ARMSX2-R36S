@@ -213,6 +213,14 @@ rm -fr "$SDL"
 tar xf "$SDL.tar.gz"
 cd "$SDL"
 cmake -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH="$INSTALLDIR" -DCMAKE_INSTALL_PREFIX="$INSTALLDIR" $PIC_FLAG -DBUILD_SHARED_LIBS=$SHARED_LIBS -DSDL_SHARED=$SHARED_LIBS -DSDL_STATIC=$STATIC_LIBS -DSDL_VIDEO=ON -DSDL_KMSDRM=ON -DSDL_KMSDRM_SHARED=ON -DSDL_POWER=OFF -DSDL_SENSOR=OFF -DSDL_DIALOG=OFF -DSDL_TRAY=OFF -DSDL_TEST_LIBRARY=OFF -DSDL_UNIX_CONSOLE_BUILD=ON -G Ninja
+
+# R36S diagnostic: print the SDL3 video/EGL/KMSDRM configuration selected by CMake.
+# Changing this script also changes the GitHub Actions dependency-cache key, so the
+# next SDL handheld run will rebuild these dependencies instead of reusing the old cache.
+echo "=== R36S SDL3 CMake diagnostics ==="
+grep -E '^(SDL_(VIDEO|KMSDRM|OPENGL|OPENGLES|.*EGL|.*GBM|.*DRM)|HAVE_(EGL|GBM|DRM))(:[^=]*)?=' build/CMakeCache.txt | sort || true
+echo "=== End R36S SDL3 CMake diagnostics ==="
+
 cmake --build build --parallel
 ninja -C build install
 cd ..
