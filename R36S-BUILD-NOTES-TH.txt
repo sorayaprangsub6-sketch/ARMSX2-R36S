@@ -1,0 +1,26 @@
+ARMSX2 2.7.2 - R36S / RK3326 / Cortex-A35 build patch
+======================================================
+
+สาเหตุที่ patch นี้มี:
+- R36S/RK3326 ใช้ Cortex-A35 ซึ่งเป็น ARMv8-A baseline และไม่มี ARMv8.1 LSE atomics
+- source เดิมใน cmake/BuildParameters.cmake ตั้ง ARM64 default เป็น -march=armv8.1-a
+  ถ้าผู้ใช้ไม่ได้กำหนด -march เอง
+- source เดิมมี comment ระบุชัดว่า ARMv8.0 cores ต้อง build ด้วย
+  -march=armv8-a + -moutline-atomics เพื่อหลีกเลี่ยง SIGILL
+
+สิ่งที่แก้:
+.github/workflows/linux_build_sdl.yml
+เพิ่ม:
+  -DCMAKE_C_FLAGS="-march=armv8-a -moutline-atomics"
+  -DCMAKE_CXX_FLAGS="-march=armv8-a -moutline-atomics"
+
+ค่าที่เหลือของ SDL handheld build คงเดิม รวมถึง:
+- ENABLE_SDL_FRONTEND=ON
+- DISABLE_ADVANCE_SIMD=TRUE
+- OVERRIDE_HOST_PAGE_SIZE=4096
+- Vulkan direct-display / KMSDRM frontend
+
+หลัง build สำเร็จ ให้ใช้ armsx2-sdl และ pcsx2-gsrunner จาก artifact ใหม่
+แทนไฟล์สองตัวใน ARMSX2-Test เดิม แล้วทดสอบ launch-test.sh อีกครั้ง
+
+หมายเหตุ: ไฟล์ ZIP นี้เป็น patched SOURCE ไม่ใช่ binary ที่ compile เสร็จแล้ว
