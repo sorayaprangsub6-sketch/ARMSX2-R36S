@@ -26,6 +26,7 @@
 
 #include <atomic>
 #include <chrono>
+#include <cstdio>
 #include <condition_variable>
 #include <csignal>
 #include <cstdlib>
@@ -865,11 +866,13 @@ END_HOTKEY_LIST()
 
 void Pcsx2SDL::CPUThreadMain(VMBootParameters initial_params, bool start_in_fsui, std::atomic<int>* ret)
 {
+	std::fprintf(stderr, "R36S STDERR: CPUThreadMain entered\\n");
+	std::fflush(stderr);
 	ret->store(EXIT_FAILURE);
 	s_cpu_thread_id.store(std::this_thread::get_id(), std::memory_order_release);
 
-	Console.WriteLn("R36S DEBUG: CPUThreadMain entered");
-	Console.WriteLn("R36S DEBUG: Before CPUThreadInitialize");
+	std::fprintf(stderr, "R36S STDERR: Before CPUThreadInitialize\\n");
+	std::fflush(stderr);
 
 	if (!VMManager::Internal::CPUThreadInitialize())
 	{
@@ -878,7 +881,8 @@ void Pcsx2SDL::CPUThreadMain(VMBootParameters initial_params, bool start_in_fsui
 		return;
 	}
 
-	Console.WriteLn("R36S DEBUG: CPUThreadInitialize succeeded");
+	std::fprintf(stderr, "R36S STDERR: CPUThreadInitialize succeeded\\n");
+	std::fflush(stderr);
 
 	VMManager::ApplySettings();
 
@@ -898,10 +902,12 @@ void Pcsx2SDL::CPUThreadMain(VMBootParameters initial_params, bool start_in_fsui
 	// visible before the user selects a game.
 	if (start_in_fsui)
 	{
-		Console.WriteLn("R36S DEBUG: Before InitializeFullscreenUI");
+		std::fprintf(stderr, "R36S STDERR: Before InitializeFullscreenUI\\n");
+		std::fflush(stderr);
 		ImGuiManager::InitializeFullscreenUI();
 
-		Console.WriteLn("R36S DEBUG: Before MTGS::WaitForOpen");
+		std::fprintf(stderr, "R36S STDERR: Before MTGS::WaitForOpen\\n");
+		std::fflush(stderr);
 		if (!MTGS::WaitForOpen())
 		{
 			Console.Error("Failed to open MTGS for FullscreenUI startup.");
@@ -1085,10 +1091,15 @@ int main(int argc, char* argv[])
 		Pcsx2SDL::CPUThreadMain(std::move(params), start_in_fsui, &thread_ret);
 	});
 
+	std::fprintf(stderr, "R36S STDERR: CPU thread created\\n");
+	std::fflush(stderr);
+
 	// VK_KHR_display has no host event loop; SDL3 input pumping happens
 	// inside InputManager on the CPU thread; signals are async. The main
 	// thread just waits for shutdown.
 	cpu_thread.join();
+	std::fprintf(stderr, "R36S STDERR: CPU thread joined, ret=%d\\n", thread_ret.load());
+	std::fflush(stderr);
 	if (s_sdl_window)
 	{
 		SDL_DestroyWindow(s_sdl_window);
