@@ -213,13 +213,51 @@ rm -fr "$SDL"
 tar xf "$SDL.tar.gz"
 cd "$SDL"
 
-# R36S diagnostic: preserve the real SDL_EGL_LoadLibrary() errors before
-# KMSDRM replaces them with the generic "Can't load EGL/GL library..." error.
+# R36S deep EGL diagnostic for SDL3 3.2.26.
+# 1) Expose the native display/platform/EGLDisplay and exact eglInitialize error.
+# 2) Clean up the failed first EGL attempt before KMSDRM retries as GLES2.
 python3 - <<'PY'
 from pathlib import Path
 
-p = Path("src/video/kmsdrm/SDL_kmsdrmvideo.c")
-s = p.read_text()
+egl = Path("src/video/SDL_egl.c")
+s = egl.read_text()
+
+old = """    if (_this->egl_data->eglInitialize(_this->egl_data->egl_display, NULL, NULL) != EGL_TRUE) {
+        _this->gl_config.driver_loaded = 0;
+        *_this->gl_config.driver_path = '\\0';
+        return SDL_SetError("Could not initialize EGL");
+    }"""
+
+new = """    fprintf(stderr,
+            "R36S EGL DEEP: native_display=%p platform=0x%x egl_display=%p driver_path=%s\\\\n",
+            (void *)(uintptr_t)native_display, (unsigned int)platform,
+            (void *)_this->egl_data->egl_display,
+            _this->gl_config.driver_path[0] ? _this->gl_config.driver_path : "<empty>");
+    fflush(stderr);
+
+    if (_this->egl_data->eglInitialize(_this->egl_data->egl_display, NULL, NULL) != EGL_TRUE) {
+        const EGLint r36s_egl_error = _this->egl_data->eglGetError();
+        fprintf(stderr,
+                "R36S EGL DEEP: eglInitialize FAILED error=0x%04x (%s)\\\\n",
+                (unsigned int)r36s_egl_error, SDL_EGL_GetErrorName(r36s_egl_error));
+        fflush(stderr);
+        _this->gl_config.driver_loaded = 0;
+        *_this->gl_config.driver_path = '\\0';
+        return SDL_SetError("Could not initialize EGL");
+    }
+
+    fprintf(stderr,
+            "R36S EGL DEEP: eglInitialize OK vendor=%s version=%s\\\\n",
+            _this->egl_data->eglQueryString(_this->egl_data->egl_display, EGL_VENDOR),
+            _this->egl_data->eglQueryString(_this->egl_data->egl_display, EGL_VERSION));
+    fflush(stderr);"""
+
+if old not in s:
+    raise SystemExit("R36S deep diagnostic: SDL_egl.c target not found; refusing wrong patch")
+egl.write_text(s.replace(old, new, 1))
+
+kms = Path("src/video/kmsdrm/SDL_kmsdrmvideo.c")
+s = kms.read_text()
 
 old = """            if (!SDL_EGL_LoadLibrary(_this, NULL, egl_display, EGL_PLATFORM_GBM_MESA)) {
                 // Try again with OpenGL ES 2.0
@@ -232,24 +270,34 @@ old = """            if (!SDL_EGL_LoadLibrary(_this, NULL, egl_display, EGL_PLAT
             }"""
 
 new = """            if (!SDL_EGL_LoadLibrary(_this, NULL, egl_display, EGL_PLATFORM_GBM_MESA)) {
-                fprintf(stderr, "R36S SDL3: first EGL load failed: %s\\n", SDL_GetError());
+                fprintf(stderr, "R36S EGL DEEP: first attempt failed: %s\\\\n", SDL_GetError());
                 fflush(stderr);
+
+                // A failed SDL_EGL_LoadLibrary() leaves egl_data allocated in SDL 3.2.26.
+                // Unload it so the documented GLES2 retry is a real clean retry.
+                SDL_EGL_UnloadLibrary(_this);
+                fprintf(stderr, "R36S EGL DEEP: first attempt cleaned; retrying GLES2\\\\n");
+                fflush(stderr);
+
                 // Try again with OpenGL ES 2.0
                 _this->gl_config.profile_mask = SDL_GL_CONTEXT_PROFILE_ES;
                 _this->gl_config.major_version = 2;
                 _this->gl_config.minor_version = 0;
                 if (!SDL_EGL_LoadLibrary(_this, NULL, egl_display, EGL_PLATFORM_GBM_MESA)) {
-                    fprintf(stderr, "R36S SDL3: GLES2 fallback failed: %s\\n", SDL_GetError());
+                    fprintf(stderr, "R36S EGL DEEP: GLES2 clean retry failed: %s\\\\n", SDL_GetError());
                     fflush(stderr);
+                    SDL_EGL_UnloadLibrary(_this);
                     return SDL_SetError("Can't load EGL/GL library on window creation.");
                 }
+                fprintf(stderr, "R36S EGL DEEP: GLES2 clean retry succeeded\\\\n");
+                fflush(stderr);
             }"""
 
 if old not in s:
-    raise SystemExit("R36S SDL3 diagnostic patch target not found; refusing to modify the wrong source.")
+    raise SystemExit("R36S deep diagnostic: KMSDRM target not found; refusing wrong patch")
+kms.write_text(s.replace(old, new, 1))
 
-p.write_text(s.replace(old, new, 1))
-print("R36S SDL3 EGL diagnostic patch applied.")
+print("R36S deep EGL diagnostic patch applied to SDL3 3.2.26.")
 PY
 
 cmake -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH="$INSTALLDIR" -DCMAKE_INSTALL_PREFIX="$INSTALLDIR" $PIC_FLAG -DBUILD_SHARED_LIBS=$SHARED_LIBS -DSDL_SHARED=$SHARED_LIBS -DSDL_STATIC=$STATIC_LIBS -DSDL_VIDEO=ON -DSDL_KMSDRM=ON -DSDL_KMSDRM_SHARED=ON -DSDL_POWER=OFF -DSDL_SENSOR=OFF -DSDL_DIALOG=OFF -DSDL_TRAY=OFF -DSDL_TEST_LIBRARY=OFF -DSDL_UNIX_CONSOLE_BUILD=ON -G Ninja
