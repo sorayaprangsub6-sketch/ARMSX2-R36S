@@ -17,6 +17,7 @@ struct WindowInfo
 		Wayland,
 		MacOS,
 		Android,
+		SDL,
 
 		// Vulkan VK_KHR_display direct-to-monitor (no compositor / no GBM
 		// intermediate). Frontend supplies no native window handle; the

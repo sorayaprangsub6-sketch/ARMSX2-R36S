@@ -6,6 +6,10 @@
 #include "GS/Renderers/OpenGL/GLContextEGLAndroid.h"
 #endif
 
+#if defined(ENABLE_SDL_FRONTEND)
+#include "GS/Renderers/OpenGL/GLContextSDL.h"
+#endif
+
 #if defined(_WIN32)
 #include "GS/Renderers/OpenGL/GLContextWGL.h"
 #else // Linux
@@ -104,6 +108,10 @@ std::unique_ptr<GLContext> GLContext::Create(const WindowInfo& wi, Error* error)
 #ifdef __ANDROID__
 	if (!context && wi.type == WindowInfo::Type::Android)
 		context = GLContextEGLAndroid::Create(wi, versions_to_try, num_versions_to_try);
+#endif
+#if defined(ENABLE_SDL_FRONTEND)
+	if (!context && wi.type == WindowInfo::Type::SDL)
+		context = GLContextSDL::Create(wi, std::span<const Version>(versions_to_try, num_versions_to_try), error);
 #endif
 #if defined(_WIN32)
 	if (!context)

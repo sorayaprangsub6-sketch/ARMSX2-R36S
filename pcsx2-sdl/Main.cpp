@@ -106,6 +106,9 @@ static SDL_Window* s_wayland_window = nullptr;
 static bool s_wayland_probed = false;
 #endif
 
+// SDL KMSDRM/OpenGL window for bare Linux handhelds such as R36S.
+static SDL_Window* s_sdl_window = nullptr;
+
 // Pending CPU-thread callbacks queued by Host::RunOnCPUThread (FullscreenUI
 // uses this to schedule work back from the GS thread, e.g. "user picked an
 // ISO from the game list, please VMManager::Initialize it on the CPU thread").
@@ -199,7 +202,7 @@ bool Pcsx2SDL::InitializeConfig()
 		// in missing defaults for first-run.
 		if (!s_base_settings->ContainsValue("EmuCore/GS", "Renderer"))
 			s_base_settings->SetIntValue("EmuCore/GS", "Renderer",
-				static_cast<int>(GSRendererType::VK));
+				static_cast<int>(GSRendererType::OGL));
 		if (!s_base_settings->ContainsValue("SPU2/Output", "OutputModule"))
 			s_base_settings->SetStringValue("SPU2/Output", "OutputModule", "sdl");
 		if (!s_base_settings->ContainsValue("EmuCore/GS", "FullscreenMode"))
@@ -418,13 +421,45 @@ std::optional<WindowInfo> Pcsx2SDL::BuildWindowInfo()
 	}
 #endif
 
+	// Bare Linux handheld: create an SDL KMSDRM OpenGL window.
+	if (!SDL_WasInit(SDL_INIT_VIDEO))
+	{
+		if (!SDL_InitSubSystem(SDL_INIT_VIDEO))
+		{
+			Console.ErrorFmt("Failed to initialize SDL video: {}", SDL_GetError());
+			return std::nullopt;
+		}
+	}
+
+	if (!s_sdl_window)
+	{
+		SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_ES);
+SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);
+SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 0);
+		const int win_w = (s_requested_width > 0) ? static_cast<int>(s_requested_width) : 640;
+		const int win_h = (s_requested_height > 0) ? static_cast<int>(s_requested_height) : 480;
+
+		s_sdl_window = SDL_CreateWindow("ARMSX2", win_w, win_h, SDL_WINDOW_OPENGL | SDL_WINDOW_FULLSCREEN);
+		if (!s_sdl_window)
+		{
+			Console.ErrorFmt("Failed to create SDL OpenGL window: {}", SDL_GetError());
+			return std::nullopt;
+		}
+	}
+
+	int px_w = 0;
+	int px_h = 0;
+	SDL_GetWindowSizeInPixels(s_sdl_window, &px_w, &px_h);
+
 	WindowInfo wi;
-	wi.type = WindowInfo::Type::VulkanDirect;
-	wi.surface_width = s_requested_width;
-	wi.surface_height = s_requested_height;
-	wi.surface_scale = 1.0f;
+	wi.type = WindowInfo::Type::SDL;
+	wi.surface_width = (px_w > 0) ? static_cast<u32>(px_w) : s_requested_width;
+	wi.surface_height = (px_h > 0) ? static_cast<u32>(px_h) : s_requested_height;
+	wi.surface_scale = SDL_GetWindowPixelDensity(s_sdl_window);
+	if (wi.surface_scale <= 0.0f)
+		wi.surface_scale = 1.0f;
 	wi.display_connection = nullptr;
-	wi.window_handle = nullptr;
+	wi.window_handle = s_sdl_window;
 	wi.surface_handle = nullptr;
 	return wi;
 }
@@ -1041,7 +1076,12 @@ int main(int argc, char* argv[])
 	// inside InputManager on the CPU thread; signals are async. The main
 	// thread just waits for shutdown.
 	cpu_thread.join();
-
+	if (s_sdl_window)
+	{
+		SDL_DestroyWindow(s_sdl_window);
+		s_sdl_window = nullptr;
+		SDL_QuitSubSystem(SDL_INIT_VIDEO);
+	}
 #if defined(WAYLAND_API)
 	// Tear down the Wayland fallback window, if one was created. Done after the
 	// CPU/GS threads are gone so nothing is still presenting to the surface.
