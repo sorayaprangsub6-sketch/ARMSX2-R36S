@@ -868,12 +868,17 @@ void Pcsx2SDL::CPUThreadMain(VMBootParameters initial_params, bool start_in_fsui
 	ret->store(EXIT_FAILURE);
 	s_cpu_thread_id.store(std::this_thread::get_id(), std::memory_order_release);
 
+	Console.WriteLn("R36S DEBUG: CPUThreadMain entered");
+	Console.WriteLn("R36S DEBUG: Before CPUThreadInitialize");
+
 	if (!VMManager::Internal::CPUThreadInitialize())
 	{
 		Console.Error("CPU thread init failed.");
 		VMManager::Internal::CPUThreadShutdown();
 		return;
 	}
+
+	Console.WriteLn("R36S DEBUG: CPUThreadInitialize succeeded");
 
 	VMManager::ApplySettings();
 
@@ -893,7 +898,10 @@ void Pcsx2SDL::CPUThreadMain(VMBootParameters initial_params, bool start_in_fsui
 	// visible before the user selects a game.
 	if (start_in_fsui)
 	{
+		Console.WriteLn("R36S DEBUG: Before InitializeFullscreenUI");
 		ImGuiManager::InitializeFullscreenUI();
+
+		Console.WriteLn("R36S DEBUG: Before MTGS::WaitForOpen");
 		if (!MTGS::WaitForOpen())
 		{
 			Console.Error("Failed to open MTGS for FullscreenUI startup.");
