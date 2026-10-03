@@ -411,6 +411,8 @@ static bool BuildWaylandWindowInfo(WindowInfo& wi)
 
 std::optional<WindowInfo> Pcsx2SDL::BuildWindowInfo()
 {
+	Console.WriteLn("R36S DEBUG: BuildWindowInfo entered");
+
 #if defined(WAYLAND_API)
 	if (WaylandSessionPresent())
 	{
