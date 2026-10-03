@@ -433,6 +433,8 @@ std::optional<WindowInfo> Pcsx2SDL::BuildWindowInfo()
 
 	if (!s_sdl_window)
 	{
+		Console.WriteLn("R36S DEBUG: Entering SDL OpenGL window creation");
+		
 		SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_ES);
 SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);
 SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 0);
@@ -440,6 +442,7 @@ SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 0);
 		const int win_h = (s_requested_height > 0) ? static_cast<int>(s_requested_height) : 480;
 
 		s_sdl_window = SDL_CreateWindow("ARMSX2", win_w, win_h, SDL_WINDOW_OPENGL | SDL_WINDOW_FULLSCREEN);
+		Console.WriteLn("R36S DEBUG: SDL_CreateWindow returned {}", static_cast<void*>(s_sdl_window));
 		if (!s_sdl_window)
 		{
 			Console.ErrorFmt("Failed to create SDL OpenGL window: {}", SDL_GetError());
