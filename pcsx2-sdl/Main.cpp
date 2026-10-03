@@ -412,7 +412,8 @@ static bool BuildWaylandWindowInfo(WindowInfo& wi)
 
 std::optional<WindowInfo> Pcsx2SDL::BuildWindowInfo()
 {
-	Console.WriteLn("R36S DEBUG: BuildWindowInfo entered");
+	std::fprintf(stderr, "R36S STDERR: BuildWindowInfo entered\n");
+	std::fflush(stderr);
 
 #if defined(WAYLAND_API)
 	if (WaylandSessionPresent())
@@ -427,11 +428,18 @@ std::optional<WindowInfo> Pcsx2SDL::BuildWindowInfo()
 	// Bare Linux handheld: create an SDL KMSDRM OpenGL window.
 	if (!SDL_WasInit(SDL_INIT_VIDEO))
 	{
+		std::fprintf(stderr, "R36S STDERR: Before SDL_InitSubSystem\n");
+		std::fflush(stderr);
 		if (!SDL_InitSubSystem(SDL_INIT_VIDEO))
 		{
+			std::fprintf(stderr, "R36S STDERR: SDL_InitSubSystem FAILED: %s\n", SDL_GetError());
+			std::fflush(stderr);
 			Console.ErrorFmt("Failed to initialize SDL video: {}", SDL_GetError());
 			return std::nullopt;
 		}
+		std::fprintf(stderr, "R36S STDERR: SDL_InitSubSystem succeeded, driver=%s\n",
+			SDL_GetCurrentVideoDriver() ? SDL_GetCurrentVideoDriver() : "<none>");
+		std::fflush(stderr);
 	}
 
 	if (!s_sdl_window)
@@ -444,8 +452,12 @@ SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 0);
 		const int win_w = (s_requested_width > 0) ? static_cast<int>(s_requested_width) : 640;
 		const int win_h = (s_requested_height > 0) ? static_cast<int>(s_requested_height) : 480;
 
+		std::fprintf(stderr, "R36S STDERR: Before SDL_CreateWindow\n");
+		std::fflush(stderr);
 		s_sdl_window = SDL_CreateWindow("ARMSX2", win_w, win_h, SDL_WINDOW_OPENGL | SDL_WINDOW_FULLSCREEN);
-		Console.WriteLn("R36S DEBUG: SDL_CreateWindow returned {}", static_cast<void*>(s_sdl_window));
+		std::fprintf(stderr, "R36S STDERR: SDL_CreateWindow returned %p, error=%s\n",
+			static_cast<void*>(s_sdl_window), SDL_GetError());
+		std::fflush(stderr);
 		if (!s_sdl_window)
 		{
 			Console.ErrorFmt("Failed to create SDL OpenGL window: {}", SDL_GetError());
@@ -906,9 +918,12 @@ void Pcsx2SDL::CPUThreadMain(VMBootParameters initial_params, bool start_in_fsui
 		std::fflush(stderr);
 		ImGuiManager::InitializeFullscreenUI();
 
-		std::fprintf(stderr, "R36S STDERR: Before MTGS::WaitForOpen\\n");
+		std::fprintf(stderr, "R36S STDERR: Before MTGS::WaitForOpen\n");
 		std::fflush(stderr);
-		if (!MTGS::WaitForOpen())
+		const bool mtgs_opened = MTGS::WaitForOpen();
+		std::fprintf(stderr, "R36S STDERR: MTGS::WaitForOpen returned %d\n", mtgs_opened ? 1 : 0);
+		std::fflush(stderr);
+		if (!mtgs_opened)
 		{
 			Console.Error("Failed to open MTGS for FullscreenUI startup.");
 			VMManager::Internal::CPUThreadShutdown();
